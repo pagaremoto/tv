@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de TV</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+        }
+        h1 {
+            color: #333;
+        }
+        .relay-container {
+            display: flex;
+            justify-content: center; /* Centrado para un solo relé */
+            margin-top: 30px;
+        }
+        .relay {
+            border: 1px solid #ddd;
+            padding: 30px;
+            border-radius: 5px;
+            width: 250px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .relay h2 {
+            font-size: 1.2em;
+            margin-bottom: 15px;
+        }
+        button {
+            margin-top: 15px;
+            padding: 12px 24px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+            width: 100%;
+        }
+        .on {
+            background-color: #FF0000;
+            color: white;
+        }
+        .off {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .status {
+            font-weight: bold;
+            margin-top: 10px;
+            font-size: 0.9em;
+        }
+        .timer {
+            font-size: 18px;
+            margin-top: 20px;
+            color: #666;
+        }
+        #loginForm {
+            margin-top: 50px;
+        }
+        #loginForm input {
+            margin: 10px 0;
+            padding: 5px;
+        }
+        #loginError {
+            color: red;
+            margin-top: 10px;
+        }
+        #controlPanel {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>Control de TV</h1>
+    
+    <div id="loginForm">
+        <h2>Iniciar sesión</h2>
+        <input type="text" id="username" placeholder="Usuario" required><br>
+        <input type="password" id="password" placeholder="Contraseña" required><br>
+        <button onclick="login()">Iniciar sesión</button>
+        <div id="loginError"></div>
+    </div>
+
+    <div id="controlPanel">
+        <div class="timer">
+            Próxima actualización en: <span id="countdown">15</span> segundos
+        </div>
+        <div class="relay-container">
+            <div class="relay">
+                <h2>TV (GPIO23)</h2>
+                <div id="status1" class="status">Estado: Cargando...</div>
+                <button id="button1" onclick="toggleRelay(1)">Cargando...</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const apiKey = 'KBLQIP56H91UXBC6';
+        const channelId = ' 2616836';
+        let currentStates = { field1: '0' };
+        let countdown = 15;
+        let countdownInterval;
+        let isCountdownActive = false;
+
+        // Credenciales de ejemplo (en una aplicación real, esto debería estar en el servidor)
+        const validCredentials = {
+            username: '1949',
+            password: '1949'
+        };
+
+        function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            if (username === validCredentials.username && password === validCredentials.password) {
+                document.getElementById('loginForm').style.display = 'none';
+                document.getElementById('controlPanel').style.display = 'block';
+                updateStatus();
+                setInterval(updateStatus, 15000); // Actualizar cada 15 segundos
+            } else {
+                document.getElementById('loginError').textContent = 'Usuario o contraseña incorrectos';
+            }
+        }
+
+        function updateStatus() {
+            fetch(`https://api.thingspeak.com/channels/${channelId}/feeds.json?api_key=${apiKey}&results=1`)
+                .then(response => response.json())
+                .then(data => {
+                    currentStates.field1 = data.feeds[0].field1;
+                    updateButton(1, currentStates.field1 === '1');
+                })
+                .catch(error => {
+                    console.error("Error al obtener los estados:", error);
+                });
+        }
+
+        function toggleRelay(relayNumber) {
+            const fieldName = `field${relayNumber}`;
+            const newState = currentStates[fieldName] === '1' ? '0' : '1';
+            currentStates[fieldName] = newState;
+            
+            fetch(`https://api.thingspeak.com/update?api_key=${apiKey}&field1=${currentStates.field1}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Error en la solicitud');
+                    }
+                    return response.text();
+                })
+                .then(data => {
+                    console.log(`Respuesta de ThingSpeak para Relé ${relayNumber}:`, data);
+                    updateButton(relayNumber, newState === '1');
+                    if (!isCountdownActive) {
+                        startCountdown();
+                    }
+                })
+                .catch(error => {
+                    console.error(`Hubo un problema con la solicitud del Relé ${relayNumber}:`, error);
+                });
+        }
+
+        function updateButton(relayNumber, isOn) {
+            const button = document.getElementById(`button${relayNumber}`);
+            const status = document.getElementById(`status${relayNumber}`);
+            if (isOn) {
+                button.textContent = "Apagar";
+                button.className = "on";
+                status.textContent = "Estado: Encendido";
+            } else {
+                button.textContent = "Encender";
+                button.className = "off";
+                status.textContent = "Estado: Apagado";
+            }
+        }
+
+        function startCountdown() {
+            isCountdownActive = true;
+            countdown = 15;
+            document.getElementById("countdown").textContent = countdown;
+
+            countdownInterval = setInterval(() => {
+                countdown--;
+                document.getElementById("countdown").textContent = countdown;
+
+                if (countdown <= 0) {
+                    clearInterval(countdownInterval);
+                    isCountdownActive = false;
+                    updateStatus();
+                }
+            }, 1000);
+        }
+    </script>
+</body>
+</ht
